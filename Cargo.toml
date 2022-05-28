@@ -19,5 +19,3 @@ serde = "1.0.137"
 jsonwebtoken = { version = "8", default-features = false }
 lazy_static = "1.4"
 chrono = "0.4"
-sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
-rocket-include-static-resources = "0.10.2"

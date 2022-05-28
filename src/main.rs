@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 
 use auth::{User, LoginRequest};
 
-
 fn make_cors() -> Cors {
     let allowed_origins = AllowedOrigins::some_exact(&[
         "http://localhost:3000",
@@ -43,30 +42,10 @@ struct Item {
     name: String
 }
 
-/*
-#[get("/")]
-async fn index() -> Option<NamedFile> {
-    let page_directory_path = format!("{}/static", env!("CARGO_MANIFEST_DIR"));
-    NamedFile::open(Path::new(&page_directory_path).join("index.html")).await.ok()
-}
-
-#[get("/")]
-fn index(sr: &State<StaticContextManager>, etag: EtagIfNoneMatch) -> StaticResponse {
-    sr.build(&etag, "html")
-}
-*/
-
 #[get("/")]
 async fn index() -> Option<NamedFile> {
     NamedFile::open("app/build/index.html").await.ok()
 }
-
-/*
-#[get("/public/<file..>")]
-async fn public(file: PathBuf) -> Option<NamedFile> {
-    NamedFile::open(Path::new("public").join(file)).await.ok()
-}
-*/
 
 #[get("/item/<id>")]
 fn item(id: usize) -> Json<Item> {
@@ -79,8 +58,6 @@ struct PrivateResponse {
     user: String,
 }
 
-// More details on Rocket request guards can be found here
-// https://rocket.rs/v0.5-rc/guide/requests/#request-guards
 #[get("/private")]
 fn private(user: User) -> Json<PrivateResponse> {
     match user {
@@ -108,20 +85,10 @@ fn login(credentials: Json<LoginRequest>) -> Result<Json<LoginResponse>, Custom<
     Ok(Json(LoginResponse { token: response }))
 }
 
-// struct State {
-    // pool: PgPool
-// }
-
 #[launch]
 fn rocket() -> _ {
-    // pool.execute(include_str!("../schema.sql")).await
-        // .map_err(CustomError::new)?;
-
-    // let state = State { pool };
-
     rocket::build()
         .mount("/public", FileServer::from("app/build"))
         .mount("/api", routes![item, private, login])
         .mount("/", routes![index]).attach(make_cors())
-        // .manage(state)
 }
