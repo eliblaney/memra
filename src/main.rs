@@ -1,21 +1,41 @@
 #[macro_use]
 extern crate rocket;
+extern crate rocket_cors;
 
 mod auth;
 
-// use std::path::{Path, PathBuf};
 use rocket::fs::{FileServer, NamedFile};
 use rocket::response::status::Custom;
 use rocket::serde::json::Json;
+use rocket::http::Method;
+use rocket_cors::{AllowedHeaders, AllowedOrigins, Cors, CorsOptions};
 use serde::{Deserialize, Serialize};
-// use shuttle_service::ShuttleRocket;
-// use shuttle_service::{ShuttleRocket, SecretStore, error::CustomError};
-// use sqlx::{Executor, FromRow, PgPool};
-//
-// use rocket_include_static_resources::{EtagIfNoneMatch, StaticContextManager, StaticResponse};
-// use rocket::State;
 
 use auth::{User, LoginRequest};
+
+
+fn make_cors() -> Cors {
+    let allowed_origins = AllowedOrigins::some_exact(&[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://0.0.0.0:8000",
+        "https://memra.app",
+        "http://memra.app",
+        "https://memra.herokuapp.com",
+        "http://memra.herokuapp.com",
+    ]);
+
+    CorsOptions {
+        allowed_origins,
+        allowed_methods: vec![Method::Get].into_iter().map(From::from).collect(), 
+        allowed_headers: AllowedHeaders::some(&[
+            "Authorization", "Accept", "Access-Control-Allow-Origin",
+        ]),
+        allow_credentials: true,
+        ..Default::default()
+    }.to_cors().expect("Error while building CORS")
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Item {
@@ -102,6 +122,6 @@ fn rocket() -> _ {
     rocket::build()
         .mount("/public", FileServer::from("app/build"))
         .mount("/api", routes![item, private, login])
-        .mount("/", routes![index])
+        .mount("/", routes![index]).attach(make_cors())
         // .manage(state)
 }

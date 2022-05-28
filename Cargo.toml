@@ -8,13 +8,17 @@ repository = "https://eliblaney.com/eliblaney/memra"
 homepage = "https://memra.app"
 readme = "README.md"
 license-file = "LICENSE"
+build = "build.rs"
 
 [[bin]]
 name = "memra"
 
+[build-dependencies]
+npm_rs = "0.2.1"
+
 [dependencies]
 rocket = { version = "0.5.0-rc.2", features = ["json"] }
-# shuttle-service = { version = "0.3", features = ["web-rocket", "secrets", "sqlx-postgres"] }
+rocket_cors = { version = "0.6.0-alpha1", default-features = false }
 serde = "1.0.137"
 jsonwebtoken = { version = "8", default-features = false }
 lazy_static = "1.4"
