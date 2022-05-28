@@ -8,7 +8,6 @@ repository = "https://eliblaney.com/eliblaney/memra"
 homepage = "https://memra.app"
 readme = "README.md"
 license-file = "LICENSE"
-build = "build.rs"
 
 [[bin]]
 name = "memra"
