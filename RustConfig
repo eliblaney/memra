@@ -1,0 +1,1 @@
+RUST_CARGO_BUILD_FLAGS="; cd app; npm run build; cd .."
