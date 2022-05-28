@@ -13,9 +13,6 @@ build = "build.rs"
 [[bin]]
 name = "memra"
 
-[build-dependencies]
-npm_rs = "0.2.1"
-
 [dependencies]
 rocket = { version = "0.5.0-rc.2", features = ["json"] }
 rocket_cors = { version = "0.6.0-alpha1", default-features = false }
