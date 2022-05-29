@@ -3,15 +3,22 @@ extern crate rocket;
 extern crate rocket_cors;
 
 mod auth;
+mod user;
 
 use rocket::fs::{FileServer, NamedFile};
 use rocket::response::status::Custom;
-use rocket::serde::json::Json;
 use rocket::http::Method;
 use rocket_cors::{AllowedHeaders, AllowedOrigins, Cors, CorsOptions};
-use serde::{Deserialize, Serialize};
+use rocket::serde::{Deserialize, Serialize, json::Json};
+use rocket_db_pools::{sqlx, Database};
 
 use auth::{User, LoginRequest};
+
+type Result<T, E = rocket::response::Debug<sqlx::Error>> = std::result::Result<T, E>;
+
+#[derive(Database)]
+#[database("main")]
+pub struct Db(sqlx::PgPool);
 
 fn make_cors() -> Cors {
     let allowed_origins = AllowedOrigins::some_exact(&[
@@ -63,7 +70,7 @@ fn private(user: User) -> Json<PrivateResponse> {
     match user {
         User::Authenticated(u) => Json(PrivateResponse {
             message: "Authenticated User.".to_string(),
-                user: u.name,
+                user: u.data.username,
         }),
         User::Guest => 
             Json(PrivateResponse {
@@ -88,7 +95,9 @@ fn login(credentials: Json<LoginRequest>) -> Result<Json<LoginResponse>, Custom<
 #[launch]
 fn rocket() -> _ {
     rocket::build()
+        .attach(Db::init())
         .mount("/public", FileServer::from("app/build"))
+        .mount("/api/users", routes![user::create, user::read])
         .mount("/api", routes![item, private, login])
         .mount("/", routes![index]).attach(make_cors())
 }

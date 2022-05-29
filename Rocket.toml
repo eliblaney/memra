@@ -1,0 +1,5 @@
+[default.databases.main]
+url = "postgres://piawoshljkhxtc:b042a5212fec9c0712c4e6271760f886cb79b4ca47927fe1d98fd1c2bb295ef1@ec2-44-196-174-238.compute-1.amazonaws.com:5432/d6t366annn416e"
+max_connections=1024
+connect_timeout=10
+idle_timeout=120

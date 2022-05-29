@@ -1,3 +1,4 @@
+use super::db;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{
     decode, encode, errors::ErrorKind, DecodingKey, EncodingKey, Header, Validation,
@@ -34,14 +35,14 @@ pub(crate) enum AuthenticationError {
 // The `name` is a custom claim for this API
 #[derive(Serialize, Deserialize)]
 pub(crate) struct AuthenticatedUser {
-    pub(crate) name: String,
+    pub(crate) data: db::User,
     exp: usize,
 }
 
 impl AuthenticatedUser {
-    pub(crate) fn from_name(name: &str) -> Self {
+    pub(crate) fn from_user(user: db::User) -> Self {
         Self {
-            name: name.to_string(),
+            data: user,
             exp: 0,
         }
     }
@@ -157,7 +158,7 @@ pub(crate) fn login(credentials: Json<LoginRequest>) -> Result<String, Custom<St
         ));
     }
 
-    let claim = AuthenticatedUser::from_name(&credentials.username);
+    let claim = AuthenticatedUser::from_user(&credentials.username);
 
     claim.to_token()
 }
