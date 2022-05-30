@@ -6,13 +6,12 @@ mod auth;
 mod user;
 
 use rocket::fs::{FileServer, NamedFile};
-use rocket::response::status::Custom;
 use rocket::http::Method;
 use rocket_cors::{AllowedHeaders, AllowedOrigins, Cors, CorsOptions};
 use rocket::serde::{Deserialize, Serialize, json::Json};
 use rocket_db_pools::{sqlx, Database};
 
-use auth::{User, LoginRequest};
+use auth::User;
 
 type Result<T, E = rocket::response::Debug<sqlx::Error>> = std::result::Result<T, E>;
 
@@ -80,24 +79,12 @@ fn private(user: User) -> Json<PrivateResponse> {
     }
 }
 
-#[derive(Serialize)]
-pub(crate) struct LoginResponse {
-    token: String,
-}
-
-/// Tries to authenticate a user. Successful authentications get a JWT
-#[post("/login", data = "<credentials>")]
-fn login(credentials: Json<LoginRequest>) -> Result<Json<LoginResponse>, Custom<String>> {
-    let response = auth::login(credentials)?;
-    Ok(Json(LoginResponse { token: response }))
-}
-
 #[launch]
 fn rocket() -> _ {
     rocket::build()
         .attach(Db::init())
         .mount("/public", FileServer::from("app/build"))
-        .mount("/api/users", routes![user::create, user::read])
-        .mount("/api", routes![item, private, login])
+        .mount("/api/users", routes![user::register, user::read, user::login, user::delete])
+        .mount("/api", routes![item, private])
         .mount("/", routes![index]).attach(make_cors())
 }
