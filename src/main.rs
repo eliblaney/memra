@@ -2,6 +2,7 @@
 extern crate rocket;
 extern crate rocket_cors;
 
+mod models;
 mod auth;
 mod user;
 

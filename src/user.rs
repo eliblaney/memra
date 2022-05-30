@@ -9,77 +9,21 @@ use argon2::{
 use rocket::http::Status;
 use rocket::futures::TryFutureExt;
 use rocket_db_pools::Connection;
-use rocket_db_pools::sqlx::{self, Row};
+use rocket_db_pools::sqlx;
 use rocket::response::status::Created;
 use rocket::serde::{Deserialize, Serialize, json::Json};
 use super::{Db, Result};
 use super::auth::AuthenticatedUser;
 use rocket::response::status::Custom;
 use super::auth;
+use super::models::{User, Credentials};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
-pub struct User {
-    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
-    pub id: Option<i32>,
-    pub username: String,
-    pub real_name: Option<String>,
-    pub verified: Option<bool>,
-}
-
-impl From<sqlx::postgres::PgRow> for User {
-    fn from(r: sqlx::postgres::PgRow) -> Self {
-        Self {
-            id: Some(r.get("id")),
-            username: r.get("username"),
-            real_name: r.get("real_name"),
-            verified: r.get("verified"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Deserialize)]
 pub struct Registration {
-    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
-    pub id: Option<i32>,
     pub real_name: Option<String>,
     pub username: String,
     pub email: String,
     pub password: String,
-}
-
-impl From<sqlx::postgres::PgRow> for Registration {
-    fn from(r: sqlx::postgres::PgRow) -> Self {
-        Self {
-            id: Some(r.get("id")),
-            real_name: r.get("real_name"),
-            username: r.get("username"),
-            email: r.get("email"),
-            password: r.get("password"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
-pub struct Credentials {
-    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
-    pub id: Option<i32>,
-    pub user_id: i32,
-    pub email: String,
-    pub password: String,
-}
-
-impl From<sqlx::postgres::PgRow> for Credentials {
-    fn from(r: sqlx::postgres::PgRow) -> Self {
-        Self {
-            id: Some(r.get("id")),
-            user_id: r.get("user_id"),
-            email: r.get("email"),
-            password: r.get("password"),
-        }
-    }
 }
 
 #[get("/<id>")]

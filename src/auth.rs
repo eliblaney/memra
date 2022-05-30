@@ -1,4 +1,4 @@
-use super::user;
+use super::models;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{
     decode, encode, errors::ErrorKind, DecodingKey, EncodingKey, Header, Validation,
@@ -33,18 +33,18 @@ pub enum AuthenticationError {
 // Only the `exp` claim (field) is required. Consult the `jsonwebtoken` documentation for other claims that can be validated.
 #[derive(Serialize, Deserialize)]
 pub struct AuthenticatedUser {
-    pub data: user::User,
+    pub data: models::User,
     exp: usize,
 }
 
-impl Into<user::User> for AuthenticatedUser {
-    fn into(self) -> user::User {
+impl Into<models::User> for AuthenticatedUser {
+    fn into(self) -> models::User {
         self.data
     }
 }
 
 impl AuthenticatedUser {
-    pub(crate) fn from_user(user: user::User) -> Self {
+    pub(crate) fn from_user(user: models::User) -> Self {
         Self {
             data: user,
             exp: 0,
