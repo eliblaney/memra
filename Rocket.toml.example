@@ -1,0 +1,5 @@
+[default.databases.main]
+url = "DATABASE_URL"
+max_connections=1024
+connect_timeout=10
+idle_timeout=120
