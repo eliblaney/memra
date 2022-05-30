@@ -25,5 +25,7 @@ lazy_static = "1.4"
 chrono = { version = "0.4.19", features = ["serde"] }
 argon2 = "0.4.0"
 rand_core = { version = "0.6", features = ["std"] }
+sqlx = { version = "0.5", features = ["runtime-tokio-rustls", "postgres", "chrono"] }
 syn = "1.0"
 quote = "1.0"
+proc-macro2 = { version = "1.0.36", default-features = false }
