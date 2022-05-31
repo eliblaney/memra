@@ -1,6 +1,8 @@
 use proc_macro::TokenStream;
 use quote::{quote, format_ident};
 use syn::*;
+use parse::Parser;
+use indexmap::IndexMap;
 
 #[proc_macro_attribute]
 pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
@@ -58,15 +60,18 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
     if let Data::Struct(s) = &ast.data {
         if let Fields::Named(f) = &s.fields {
             let fields = &f.named;
+            let types: Vec<_> = fields.iter().map(|x| &x.ty).collect();
             let fields: Vec<_> = fields.iter().map(|x| &x.ident).collect();
+            // row.get(field) repetitions for ::from(PgRow)
             let mut getters = quote! {};
             for field in &fields {
                 let field_str = quote! { #field }.to_string();
                 getters = quote! {
                     #getters
                     #field: r.get(#field_str),
-                }
+                };
             }
+            // SQL variables ($1, $2, etc) in INSERT statement
             let size = fields.len();
             let mut col_vars = vec![];
             for i in 0..size {
@@ -77,29 +82,31 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
             for i in size..2*size {
                 val_vars.push(format!("${}", i + 2));
             }
+            // Struct fields to bind as variables in INSERT statement
             let val_vars = val_vars.join(",");
             let mut bind_columns = quote! {};
             for field in &fields {
+                let field_str = quote! { #field }.to_string();
                 bind_columns = quote! {
                     #bind_columns
-                    .bind(&self.#field)
-                }
+                    .bind(#field_str)
+                };
             }
             let mut bind_values = quote! {};
             for field in &fields {
-                let field_str = quote! { #field }.to_string();
                 bind_values = quote! {
                     #bind_values
-                    .bind(#field_str)
-                }
+                    .bind(&self.#field)
+                };
             }
             let insert_sql = format!("INSERT INTO $1 ({}) VALUES ({}) RETURNING *", col_vars, val_vars);
+            // SQL variables ($1, $2, etc) in UPDATE statement
             let mut set_vars = vec![];
             for i in (0..2*size).step_by(2) {
                 set_vars.push(format!("${} = ${}", i, i + 1));
             }
             let set_vars = set_vars.join(",");
-            let update_sql = format!("UPDATE $1 SET {} RETURNING *", set_vars);
+            // Struct fields to bind as variables in UPDATE statement
             let mut set_binds = quote! {};
             for field in &fields {
                 let field_str = quote! { #field }.to_string();
@@ -107,8 +114,22 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
                     #set_binds
                     .bind(#field_str)
                     .bind(&self.#field)
-                }
+                };
             }
+            let update_sql = format!("UPDATE $1 SET {} RETURNING *", set_vars);
+
+            // Fields and types to accept in ::new() (skipping the first field/type, id)
+            let mut new_params = quote! {};
+            let mut new_constructor = quote! {};
+            for (field, ty) in std::iter::zip(fields, types).skip(1) {
+                new_params = quote! {
+                    #new_params #field: #ty,
+                };
+                new_constructor = quote! {
+                    #new_constructor #field,
+                };
+            }
+            
             return quote! {
                 #ast
 
@@ -122,11 +143,11 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
                 }
 
                 impl #name {
-                    fn table() -> &'static str {
+                    pub fn table() -> &'static str {
                         #table
                     }
 
-                    async fn find(id: i32, mut db: rocket_db_pools::Connection<crate::Db>) -> (Option<Self>, rocket_db_pools::Connection<crate::Db>) {
+                    pub async fn find(id: i32, mut db: rocket_db_pools::Connection<crate::Db>) -> (Option<Self>, rocket_db_pools::Connection<crate::Db>) {
                         use rocket::futures::TryFutureExt;
                         (sqlx::query("SELECT * FROM $1 WHERE id = $2")
                             .bind(#table)
@@ -136,7 +157,7 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
                             .await.ok(), db)
                     }
 
-                    async fn save(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> (Option<Self>, rocket_db_pools::Connection<crate::Db>) {
+                    pub async fn save(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> (Option<Self>, rocket_db_pools::Connection<crate::Db>) {
                         use rocket::futures::TryFutureExt;
                         match self.id {
                             None => {
@@ -156,6 +177,12 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
                                     .map_ok(|r| <#name>::from(r))
                                     .await.ok(), db)
                             }
+                        }
+                    }
+
+                    pub fn new(#new_params) -> Self {
+                        Self {
+                            id: None, #new_constructor
                         }
                     }
                 }
@@ -185,6 +212,7 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
     if let Data::Struct(s) = &ast.data {
         if let Fields::Named(f) = &s.fields {
             let fields = &f.named;
+            let mut linked_fields: IndexMap<Field, Option<Path>> = IndexMap::new();
             let quotes: Vec<_> = fields.into_iter().filter_map(|p| {
                 let attrs = &p.attrs;
                 let attrs: Vec<&Attribute> = attrs.into_iter().filter(|a| {
@@ -194,6 +222,8 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
                 }).collect();
 
                 if attrs.len() != 1 {
+                    let field_copy: Field = Field::parse_named.parse2(quote! { #p }).ok().unwrap();
+                    linked_fields.insert(field_copy, None);
                     return None;
                 }
 
@@ -241,6 +271,8 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
                 let field_string: &str = &field.to_string();
                 let shortened_field = &field_string.split("_").next().unwrap();
                 let fname = format_ident!("get_{}", &shortened_field);
+                let f2name = format_ident!("find_{}", &lower_name_ident);
+
                 let q = quote! {
                     impl #name {
                         pub async fn #fname(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> #obj {
@@ -254,7 +286,7 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
                     }
 
                     impl #obj {
-                        pub async fn #lower_name_ident(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> Vec<#name> {
+                        pub async fn #f2name(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> Vec<#name> {
                             use rocket::futures::TryStreamExt;
                             rocket_db_pools::sqlx::query("SELECT * FROM $1 WHERE $1.$2 = $3")
                                 .bind(<#name>::table()).bind(#field_string).bind(&self.id)
@@ -267,10 +299,56 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
 
                 };
 
+                let field_copy: Field = Field::parse_named.parse2(quote! { #p }).ok().unwrap();
+                linked_fields.insert(field_copy, Some(obj.unwrap()));
+
                 return Some(q);
             }).collect();
 
-            return builder(&mut quotes.into_iter(), quote! {}).into();
+            // Fields and types to accept in ::new() (skipping the first field/type, id)
+            let mut new_params = quote! {};
+            let mut new_constructor = quote! {};
+            let mut new_safeguards = quote! {};
+            for (field, path) in linked_fields {
+                let ident = &field.ident.unwrap();
+                if &ident.to_string() == "id" { continue; }
+                let ty = &field.ty;
+                match path {
+                    Some(path) =>  {
+                        new_params = quote! {
+                            #new_params #ident: #path,
+                        };
+                        new_constructor = quote! {
+                            #new_constructor #ident: #ident.id.unwrap(),
+                        };
+                        new_safeguards = quote! {
+                            #new_safeguards
+                            if #ident.id.is_none() {
+                                return None;
+                            }
+                        };
+                    },
+                    None =>  {
+                        new_params = quote! {
+                            #new_params #ident: #ty,
+                        };
+                        new_constructor = quote! {
+                            #new_constructor #ident,
+                        };
+                    }
+                };
+            }
+
+            return builder(&mut quotes.into_iter(), quote! {
+                impl #name {
+                    pub fn new_from(#new_params) -> Option<Self> {
+                        #new_safeguards
+                        Some(Self {
+                            id: None, #new_constructor
+                        })
+                    }
+                }
+            }).into();
         }
     }
 
