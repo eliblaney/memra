@@ -7,17 +7,18 @@ use memra::{model, Related};
 #[serde(crate = "rocket::serde")]
 pub struct User {
     pub username: String,
+    pub email: String,
     pub real_name: Option<String>,
     pub verified: Option<bool>,
 }
 
 #[model(table = "credentials")]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Related)]
 #[serde(crate = "rocket::serde")]
 pub struct Credentials {
     #[foreign(type = "User")]
     pub user_id: i32,
-    pub email: String,
     pub password: String,
 }
 
