@@ -11,11 +11,11 @@ pub struct User {
     pub verified: Option<bool>,
 }
 
-#[model]
+#[model(table = "credentials")]
 #[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Credentials {
-    #[foreign(type="User", table="users")]
+    #[foreign(type = "User")]
     pub user_id: i32,
     pub email: String,
     pub password: String,
@@ -25,7 +25,7 @@ pub struct Credentials {
 #[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Course {
-    #[foreign(type="User", table="users")]
+    #[foreign(type = "super::models::User")]
     pub user_id: i32,
     pub visibility: Option<bool>,
     pub name: String,
@@ -36,7 +36,7 @@ pub struct Course {
 #[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Deck {
-    #[foreign(type="User", table="users")]
+    #[foreign(type = "User")]
     pub user_id: i32,
     pub visibility: Option<bool>,
     pub name: String,
@@ -47,9 +47,9 @@ pub struct Deck {
 #[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Card {
-    #[foreign(type="User", table="users")]
+    #[foreign(type = "User")]
     pub user_id: i32,
-    #[foreign(type="Deck", table="decks")]
+    #[foreign(type = "Deck")]
     pub deck_id: i32,
     pub front: Vec<u8>,
     pub back: Vec<u8>,
@@ -59,9 +59,9 @@ pub struct Card {
 #[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct History {
-    #[foreign(type="User", table="users")]
+    #[foreign(type = "User")]
     pub user_id: i32,
-    #[foreign(type="Card", table="cards")]
+    #[foreign(type = "Card")]
     pub card_id: i32,
     pub ts: NaiveDateTime,
     pub num_confident: i32,
@@ -73,7 +73,7 @@ pub struct History {
 #[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Settings {
-    #[foreign(type="User", table="users")]
+    #[foreign(type = "User")]
     pub user_id: i32,
     pub public_profile: Option<bool>,
     pub avatar: Vec<u8>,
@@ -83,7 +83,7 @@ pub struct Settings {
 #[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Notification {
-    #[foreign(type="User", table="users")]
+    #[foreign(type = "User")]
     pub user_id: i32,
     pub ts: NaiveDateTime,
     pub message: String,
@@ -94,7 +94,7 @@ pub struct Notification {
 #[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Addon {
-    #[foreign(type="User", table="users")]
+    #[foreign(type = "User")]
     pub user_id: i32,
     pub visibility: Option<bool>,
     pub name: String,
@@ -106,9 +106,9 @@ pub struct Addon {
 #[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct CourseDeck {
-    #[foreign(type="Course", table="courses")]
+    #[foreign(type = "Course")]
     pub course_id: i32,
-    #[foreign(type="Deck", table="decks")]
+    #[foreign(type = "Deck")]
     pub deck_id: i32,
 }
 
@@ -116,9 +116,9 @@ pub struct CourseDeck {
 #[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Followers {
-    #[foreign(type="User", table="users", collect="followers")]
+    #[foreign(type = "User", collect = "followers")]
     pub follower_id: i32,
-    #[foreign(type="User", table="users", collect="following")]
+    #[foreign(type = "User", collect = "following")]
     pub following_id: i32,
 }
 
@@ -126,9 +126,9 @@ pub struct Followers {
 #[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct CourseSubscription {
-    #[foreign(type="User", table="users")]
+    #[foreign(type = "User")]
     pub user_id: i32,
-    #[foreign(type="Course", table="courses")]
+    #[foreign(type = "Course")]
     pub course_id: i32,
 }
 
@@ -136,8 +136,8 @@ pub struct CourseSubscription {
 #[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct DeckSubscription {
-    #[foreign(type="User", table="users")]
+    #[foreign(type = "User")]
     pub user_id: i32,
-    #[foreign(type="Course", table="courses")]
+    #[foreign(type = "Course")]
     pub deck_id: i32,
 }

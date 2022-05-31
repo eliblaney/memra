@@ -3,7 +3,8 @@ use quote::{quote, format_ident};
 use syn::*;
 
 #[proc_macro_attribute]
-pub fn model(_args: TokenStream, input: TokenStream) -> TokenStream  {
+pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
+    let args = parse_macro_input!(args as AttributeArgs);
     let mut ast = parse_macro_input!(input as DeriveInput);
     if let Data::Struct(ref mut struct_data) = &mut ast.data {
         if let Fields::Named(fields) = &mut struct_data.fields {
@@ -39,10 +40,34 @@ pub fn model(_args: TokenStream, input: TokenStream) -> TokenStream  {
     }
 
     let name = &ast.ident;
+    let mut table: String = format!("{}s", &name.to_string().to_lowercase()).into();
+
+    for arg in args {
+        if let NestedMeta::Meta(inner) = arg {
+            if let Meta::NameValue(nv) = inner {
+                let ident = &nv.path.segments.first().unwrap().ident;
+                if ident == &format_ident!("table") {
+                    if let Lit::Str(s) = &nv.lit {
+                        table = s.value()
+                    }
+                }
+            }
+        }
+    }
+
     if let Data::Struct(s) = &ast.data {
         if let Fields::Named(f) = &s.fields {
             let fields = &f.named;
-            let iter = fields.into_iter().map(|f| &f.ident).into_iter();
+            let fields: Vec<_> = fields.iter().map(|x| &x.ident).collect();
+            let mut getters = quote! {};
+            for field in &fields {
+                // make copy of field but as a string
+                let field2 = quote! { #field }.to_string();
+                getters = quote! {
+                    #getters
+                    #field: r.get(#field2),
+                }
+            }
             return quote! {
                 #ast
 
@@ -50,8 +75,14 @@ pub fn model(_args: TokenStream, input: TokenStream) -> TokenStream  {
                     fn from(r: rocket_db_pools::sqlx::postgres::PgRow) -> Self {
                         use rocket_db_pools::sqlx::Row;
                         Self {
-                            #(#iter: r.get("#iter")),*
+                            #getters
                         }
+                    }
+                }
+
+                impl #name {
+                    fn table() -> &'static str {
+                        #table
                     }
                 }
             }.into();
@@ -94,23 +125,17 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
 
                 let meta = &attrs.first().unwrap().parse_meta().unwrap();
                 let mut obj: Option<String> = None;
-                let mut table: Option<String> = None;
                 let lower_name = &name.to_string().to_lowercase();
                 let mut lower_name_ident = format_ident!("{}", &lower_name);
 
-                if let Meta::List(ml) = &meta {
+                if let Meta::List(ml) = meta {
                     ml.nested.iter().for_each(|m| {
                         if let NestedMeta::Meta(inner) = m {
                             if let Meta::NameValue(nv) = inner {
                                 let ident = &nv.path.segments.first().unwrap().ident;
                                 if ident == &format_ident!("type") {
                                     if let Lit::Str(s) = &nv.lit {
-                                        obj = Some(s.value());
-                                    }
-                                }
-                                if ident == &format_ident!("table") {
-                                    if let Lit::Str(s) = &nv.lit {
-                                        table = Some(s.value())
+                                        obj = Some(s.value())
                                     }
                                 }
                                 if ident == &format_ident!("collect") {
@@ -123,15 +148,21 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
                     });
                 }
 
-                if obj.is_none() || table.is_none() {
+                if obj.is_none() {
                     return quote! {
-                            compile_error!("foreign attribute must include type and table");
-                        }.into();
+                        compile_error!("foreign attribute must include type");
+                    }.into();
                 }
 
-                let obj = obj.unwrap();
-                let table = table.unwrap();
-                let obj = format_ident!("{}", &obj);
+                let obj: Result<Path> = parse_str(obj.unwrap().as_str());
+
+                if obj.is_err() {
+                    return quote! {
+                        compile_error!("type must be ident or path");
+                    }.into();
+                }
+
+                let obj = obj.ok();
                 let field = &p.ident.as_ref().unwrap();
                 let field_string: &str = &field.to_string();
                 let shortened_field = &field_string.split("_").next().unwrap();
@@ -141,7 +172,7 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
                         pub async fn #fname(&self, mut db: rocket_db_pools::Connection<super::Db>) -> #obj {
                             use rocket::futures::TryFutureExt;
                             rocket_db_pools::sqlx::query("SELECT * FROM $1 WHERE id = $2")
-                                .bind(#table).bind(&self.#field)
+                                .bind(<#obj>::table()).bind(&self.#field)
                                 .fetch_one(&mut *db)
                                 .map_ok(|r| <#obj>::from(r))
                                 .await.ok().unwrap()
@@ -152,7 +183,7 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
                         pub async fn #lower_name_ident(&self, mut db: rocket_db_pools::Connection<super::Db>) -> Vec<#name> {
                             use rocket::futures::TryStreamExt;
                             rocket_db_pools::sqlx::query("SELECT * FROM $1 WHERE $1.$2 = $3")
-                                .bind(#lower_name).bind(#field_string).bind(&self.id)
+                                .bind(<#name>::table()).bind(#field_string).bind(&self.id)
                                 .fetch(&mut *db)
                                 .map_ok(|r| <#name>::from(r))
                                 .try_collect::<Vec<_>>()
