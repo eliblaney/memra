@@ -1,9 +1,10 @@
 use rocket::serde::{Deserialize, Serialize};
 use chrono::NaiveDateTime;
-use memra::{model, Related};
+use memra::*;
 
 #[model]
 #[derive(Debug, Clone, Deserialize, Serialize)]
+// #[derive(Read)]
 #[serde(crate = "rocket::serde")]
 pub struct User {
     pub username: String,
@@ -23,10 +24,11 @@ pub struct Credentials {
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Related)]
 #[serde(crate = "rocket::serde")]
 pub struct Course {
-    #[foreign(type = "super::models::User")]
+    #[foreign(type = "User")]
     pub user_id: i32,
     pub visibility: Option<bool>,
     pub name: String,
@@ -34,7 +36,9 @@ pub struct Course {
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Related)]
+// #[derive(Related, CreateWithUser, ReadIfVisible, UpdateIfOwner, DeleteIfOwner)]
 #[serde(crate = "rocket::serde")]
 pub struct Deck {
     #[foreign(type = "User")]

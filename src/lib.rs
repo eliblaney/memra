@@ -61,11 +61,52 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
             let fields: Vec<_> = fields.iter().map(|x| &x.ident).collect();
             let mut getters = quote! {};
             for field in &fields {
-                // make copy of field but as a string
-                let field2 = quote! { #field }.to_string();
+                let field_str = quote! { #field }.to_string();
                 getters = quote! {
                     #getters
-                    #field: r.get(#field2),
+                    #field: r.get(#field_str),
+                }
+            }
+            let size = fields.len();
+            let mut col_vars = vec![];
+            for i in 0..size {
+                col_vars.push(format!("${}", i + 2));
+            }
+            let col_vars = col_vars.join(",");
+            let mut val_vars = vec![];
+            for i in size..2*size {
+                val_vars.push(format!("${}", i + 2));
+            }
+            let val_vars = val_vars.join(",");
+            let mut bind_columns = quote! {};
+            for field in &fields {
+                bind_columns = quote! {
+                    #bind_columns
+                    .bind(&self.#field)
+                }
+            }
+            let mut bind_values = quote! {};
+            for field in &fields {
+                let field_str = quote! { #field }.to_string();
+                bind_values = quote! {
+                    #bind_values
+                    .bind(#field_str)
+                }
+            }
+            let insert_sql = format!("INSERT INTO $1 ({}) VALUES ({}) RETURNING *", col_vars, val_vars);
+            let mut set_vars = vec![];
+            for i in (0..2*size).step_by(2) {
+                set_vars.push(format!("${} = ${}", i, i + 1));
+            }
+            let set_vars = set_vars.join(",");
+            let update_sql = format!("UPDATE $1 SET {} RETURNING *", set_vars);
+            let mut set_binds = quote! {};
+            for field in &fields {
+                let field_str = quote! { #field }.to_string();
+                set_binds = quote! {
+                    #set_binds
+                    .bind(#field_str)
+                    .bind(&self.#field)
                 }
             }
             return quote! {
@@ -83,6 +124,39 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
                 impl #name {
                     fn table() -> &'static str {
                         #table
+                    }
+
+                    async fn find(id: i32, mut db: rocket_db_pools::Connection<crate::Db>) -> (Option<Self>, rocket_db_pools::Connection<crate::Db>) {
+                        use rocket::futures::TryFutureExt;
+                        (sqlx::query("SELECT * FROM $1 WHERE id = $2")
+                            .bind(#table)
+                            .bind(id)
+                            .fetch_one(&mut *db)
+                            .map_ok(|r| <#name>::from(r))
+                            .await.ok(), db)
+                    }
+
+                    async fn save(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> (Option<Self>, rocket_db_pools::Connection<crate::Db>) {
+                        use rocket::futures::TryFutureExt;
+                        match self.id {
+                            None => {
+                                (sqlx::query(#insert_sql)
+                                    .bind(#table)
+                                    #bind_columns
+                                    #bind_values
+                                    .fetch_one(&mut *db)
+                                    .map_ok(|r| <#name>::from(r))
+                                    .await.ok(), db)
+                            },
+                            Some(_) => {
+                                (sqlx::query(#update_sql)
+                                    .bind(#table)
+                                    #set_binds
+                                    .fetch_one(&mut *db)
+                                    .map_ok(|r| <#name>::from(r))
+                                    .await.ok(), db)
+                            }
+                        }
                     }
                 }
             }.into();
@@ -169,7 +243,7 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
                 let fname = format_ident!("get_{}", &shortened_field);
                 let q = quote! {
                     impl #name {
-                        pub async fn #fname(&self, mut db: rocket_db_pools::Connection<super::Db>) -> #obj {
+                        pub async fn #fname(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> #obj {
                             use rocket::futures::TryFutureExt;
                             rocket_db_pools::sqlx::query("SELECT * FROM $1 WHERE id = $2")
                                 .bind(<#obj>::table()).bind(&self.#field)
@@ -180,7 +254,7 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
                     }
 
                     impl #obj {
-                        pub async fn #lower_name_ident(&self, mut db: rocket_db_pools::Connection<super::Db>) -> Vec<#name> {
+                        pub async fn #lower_name_ident(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> Vec<#name> {
                             use rocket::futures::TryStreamExt;
                             rocket_db_pools::sqlx::query("SELECT * FROM $1 WHERE $1.$2 = $3")
                                 .bind(<#name>::table()).bind(#field_string).bind(&self.id)
@@ -204,3 +278,20 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
         compile_error!("macro can only be used on structs with named fields");
     }.into()
 }
+
+/*
+#[proc_macro_derive(Read)]
+pub fn impl_read(input: TokenStream) -> TokenStream  {
+    let ast = parse_macro_input!(input as DeriveInput);
+    quote! {
+        #[get("/<id>")]
+        pub async fn read(mut db: rocket_db_pools::Connection<crate::Db>, id: i32) -> Option<Json<User>> {
+            sqlx::query("SELECT * FROM users WHERE id = $1")
+                .bind(id)
+                .fetch_one(&mut *db)
+                .map_ok(|r| Json(User::from(r)))
+                .await.ok()
+        }
+    }.into()
+}
+*/
