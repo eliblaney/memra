@@ -4,7 +4,6 @@ use memra::*;
 
 #[model]
 #[derive(Debug, Clone, Deserialize, Serialize)]
-// #[derive(Read)]
 #[serde(crate = "rocket::serde")]
 pub struct User {
     pub username: String,
@@ -14,8 +13,7 @@ pub struct User {
 }
 
 #[model(table = "credentials")]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[derive(Related)]
+#[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Credentials {
     #[foreign(type = "User")]
@@ -24,8 +22,7 @@ pub struct Credentials {
 }
 
 #[model]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[derive(Related)]
+#[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Course {
     #[foreign(type = "User")]
@@ -36,9 +33,7 @@ pub struct Course {
 }
 
 #[model]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[derive(Related)]
-// #[derive(Related, CreateWithUser, ReadIfVisible, UpdateIfOwner, DeleteIfOwner)]
+#[derive(Related, Debug, Clone, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Deck {
     #[foreign(type = "User")]

@@ -180,6 +180,26 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
                         }
                     }
 
+                    pub async fn read(id: i32, mut db: rocket_db_pools::Connection<crate::Db>) -> (Option<Self>, rocket_db_pools::Connection<crate::Db>) {
+                        use rocket::futures::TryFutureExt;
+                        (sqlx::query("SELECT * FROM $1 WHERE id = $2")
+                         .bind(#table)
+                         .bind(id)
+                         .fetch_one(&mut *db)
+                         .map_ok(|r| Self::from(r))
+                         .await.ok(), db)
+                    }
+
+                    pub async fn delete(id: i32, mut db: rocket_db_pools::Connection<crate::Db>) -> (std::result::Result<u64, sqlx::Error>, rocket_db_pools::Connection<crate::Db>) {
+                        use rocket::futures::TryFutureExt;
+                        (sqlx::query("DELETE FROM $1 WHERE id = $2")
+                            .bind(#table)
+                            .bind(id)
+                            .execute(&mut *db)
+                            .map_ok(|r| r.rows_affected())
+                            .await, db)
+                    }
+
                     pub fn new(#new_params) -> Self {
                         Self {
                             id: None, #new_constructor
@@ -311,19 +331,21 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
             let mut new_safeguards = quote! {};
             for (field, path) in linked_fields {
                 let ident = &field.ident.unwrap();
-                if &ident.to_string() == "id" { continue; }
+                let ident_str = &ident.to_string();
+                if ident_str == "id" { continue; }
+                let ident_no_id = format_ident!("{}", str::replace(ident_str, "_id", ""));
                 let ty = &field.ty;
                 match path {
                     Some(path) =>  {
                         new_params = quote! {
-                            #new_params #ident: #path,
+                            #new_params #ident_no_id: #path,
                         };
                         new_constructor = quote! {
-                            #new_constructor #ident: #ident.id.unwrap(),
+                            #new_constructor #ident: #ident_no_id.id.unwrap(),
                         };
                         new_safeguards = quote! {
                             #new_safeguards
-                            if #ident.id.is_none() {
+                            if #ident_no_id.id.is_none() {
                                 return None;
                             }
                         };
@@ -356,20 +378,3 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
         compile_error!("macro can only be used on structs with named fields");
     }.into()
 }
-
-/*
-#[proc_macro_derive(Read)]
-pub fn impl_read(input: TokenStream) -> TokenStream  {
-    let ast = parse_macro_input!(input as DeriveInput);
-    quote! {
-        #[get("/<id>")]
-        pub async fn read(mut db: rocket_db_pools::Connection<crate::Db>, id: i32) -> Option<Json<User>> {
-            sqlx::query("SELECT * FROM users WHERE id = $1")
-                .bind(id)
-                .fetch_one(&mut *db)
-                .map_ok(|r| Json(User::from(r)))
-                .await.ok()
-        }
-    }.into()
-}
-*/
