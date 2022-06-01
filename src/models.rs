@@ -141,3 +141,16 @@ pub struct DeckSubscription {
     #[foreign(type = "Course")]
     pub deck_id: i32,
 }
+
+pub trait ToJson<T> {
+    fn json(self) -> Option<rocket::serde::json::Json<T>>;
+}
+
+impl<T> ToJson<T> for Option<T> {
+    fn json(self) -> Option<rocket::serde::json::Json<T>> {
+        match self {
+            Some(model) => Some(rocket::serde::json::Json(model)),
+            None => None,
+        }
+    }
+}

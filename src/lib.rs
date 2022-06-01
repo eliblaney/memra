@@ -103,7 +103,7 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
             // SQL variables ($1, $2, etc) in UPDATE statement
             let mut set_vars = vec![];
             for i in (0..2*size).step_by(2) {
-                set_vars.push(format!("${} = ${}", i, i + 1));
+                set_vars.push(format!("${} = ${}", i + 2, i + 3));
             }
             let set_vars = set_vars.join(",");
             // Struct fields to bind as variables in UPDATE statement
@@ -157,26 +157,37 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
                             .await.ok(), db)
                     }
 
+                    pub async fn find_where(field: &str, value: &String, mut db: rocket_db_pools::Connection<crate::Db>) -> (Option<Self>, rocket_db_pools::Connection<crate::Db>) {
+                        use rocket::futures::TryFutureExt;
+                        (sqlx::query("SELECT * FROM $1 WHERE $2 = $3")
+                            .bind(#table)
+                            .bind(field)
+                            .bind(value)
+                            .fetch_one(&mut *db)
+                            .map_ok(|r| <#name>::from(r))
+                            .await.ok(), db)
+                    }
+
                     pub async fn save(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> (Option<Self>, rocket_db_pools::Connection<crate::Db>) {
                         use rocket::futures::TryFutureExt;
                         match self.id {
-                            None => {
-                                (sqlx::query(#insert_sql)
+                            None => (
+                                sqlx::query(#insert_sql)
                                     .bind(#table)
                                     #bind_columns
                                     #bind_values
                                     .fetch_one(&mut *db)
                                     .map_ok(|r| <#name>::from(r))
-                                    .await.ok(), db)
-                            },
-                            Some(_) => {
-                                (sqlx::query(#update_sql)
+                                    .await.ok(), db
+                            ),
+                            Some(_) => (
+                                sqlx::query(#update_sql)
                                     .bind(#table)
                                     #set_binds
                                     .fetch_one(&mut *db)
                                     .map_ok(|r| <#name>::from(r))
-                                    .await.ok(), db)
-                            }
+                                    .await.ok(), db
+                            )
                         }
                     }
 
@@ -200,12 +211,17 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
                             .await, db)
                     }
 
+                    pub fn json(self) -> rocket::serde::json::Json<#name> {
+                        rocket::serde::json::Json(self)
+                    }
+
                     pub fn new(#new_params) -> Self {
                         Self {
                             id: None, #new_constructor
                         }
                     }
                 }
+
             }.into();
         }
     }
@@ -295,25 +311,25 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
 
                 let q = quote! {
                     impl #name {
-                        pub async fn #fname(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> #obj {
+                        pub async fn #fname(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> (#obj, rocket_db_pools::Connection<crate::Db>) {
                             use rocket::futures::TryFutureExt;
-                            rocket_db_pools::sqlx::query("SELECT * FROM $1 WHERE id = $2")
+                            (rocket_db_pools::sqlx::query("SELECT * FROM $1 WHERE id = $2")
                                 .bind(<#obj>::table()).bind(&self.#field)
                                 .fetch_one(&mut *db)
                                 .map_ok(|r| <#obj>::from(r))
-                                .await.ok().unwrap()
+                                .await.ok().unwrap(), db)
                         }
                     }
 
                     impl #obj {
-                        pub async fn #f2name(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> Vec<#name> {
+                        pub async fn #f2name(&self, mut db: rocket_db_pools::Connection<crate::Db>) -> (Vec<#name>, rocket_db_pools::Connection<crate::Db>) {
                             use rocket::futures::TryStreamExt;
-                            rocket_db_pools::sqlx::query("SELECT * FROM $1 WHERE $1.$2 = $3")
+                            (rocket_db_pools::sqlx::query("SELECT * FROM $1 WHERE $1.$2 = $3")
                                 .bind(<#name>::table()).bind(#field_string).bind(&self.id)
                                 .fetch(&mut *db)
                                 .map_ok(|r| <#name>::from(r))
                                 .try_collect::<Vec<_>>()
-                                .await.ok().unwrap()
+                                .await.ok().unwrap(), db)
                         }
                     }
 
@@ -338,7 +354,7 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
                 match path {
                     Some(path) =>  {
                         new_params = quote! {
-                            #new_params #ident_no_id: #path,
+                            #new_params #ident_no_id: &#path,
                         };
                         new_constructor = quote! {
                             #new_constructor #ident: #ident_no_id.id.unwrap(),

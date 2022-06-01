@@ -16,7 +16,7 @@ use super::{Db, Result};
 use super::auth::AuthenticatedUser;
 use rocket::response::status::Custom;
 use super::auth;
-use super::models::{User, Credentials};
+use super::models::{User, Credentials, ToJson};
 
 #[derive(Deserialize)]
 pub struct Registration {
@@ -27,22 +27,15 @@ pub struct Registration {
 }
 
 #[get("/<id>")]
-pub async fn read(mut db: Connection<Db>, id: i32) -> Option<Json<User>> {
-    sqlx::query("SELECT * FROM users WHERE id = $1")
-        .bind(id)
-        .fetch_one(&mut *db)
-        .map_ok(|r| Json(User::from(r)))
-        .await.ok()
+pub async fn read(db: Connection<Db>, id: i32) -> Option<Json<User>> {
+    let (u, _db) = User::read(id, db).await;
+    u.json()
 }
 
 #[delete("/")]
-pub async fn delete(mut db: Connection<Db>, user: AuthenticatedUser) -> Result<Option<()>> {
-    let result = sqlx::query("DELETE FROM users WHERE id = $1")
-        .bind(user.data.id)
-        .execute(&mut *db)
-        .await?;
-
-    Ok((result.rows_affected() == 1).then(|| ()))
+pub async fn delete(db: Connection<Db>, user: AuthenticatedUser) -> Result<Option<()>> {
+    let (rows_affected, _db) = User::delete(user.data.id.unwrap(), db).await;
+    Ok((rows_affected? == 1).then(|| ()))
 }
 
 #[derive(Serialize)]
@@ -57,12 +50,8 @@ pub struct LoginRequest {
 }
 
 #[post("/login", data = "<credentials>")]
-pub async fn login(mut db: Connection<Db>, credentials: Json<LoginRequest>) -> Result<Json<JwtToken>, Custom<String>> {
-    let user: Option<User> = sqlx::query("SELECT id FROM users WHERE username = $1")
-        .bind(&credentials.username)
-        .fetch_one(&mut *db)
-        .map_ok(|r| User::from(r))
-        .await.ok();
+pub async fn login(db: Connection<Db>, credentials: Json<LoginRequest>) -> Result<Json<JwtToken>, Custom<String>> {
+    let (user, db) = User::find_where("username", &credentials.username, db).await;
 
     if user.is_none() {
         return Err(Custom(
@@ -73,20 +62,16 @@ pub async fn login(mut db: Connection<Db>, credentials: Json<LoginRequest>) -> R
 
     let user = user.unwrap();
 
-    let creds: Option<Credentials> = sqlx::query("SELECT * FROM credentials WHERE user_id = $1")
-        .bind(&user.id)
-        .fetch_one(&mut *db)
-        .map_ok(|r| Credentials::from(r))
-        .await.ok();
+    let (creds, _db) = user.find_credentials(db).await;
 
-    if creds.is_none() {
+    if creds.len() == 0 {
         return Err(Custom(
             Status::InternalServerError,
             "Could not verify login credentials.".to_string(),
         ));
     }
 
-    let creds = creds.unwrap();
+    let creds = &creds[0];
     let password_hash = PasswordHash::new(creds.password.as_str());
 
     if password_hash.is_err() {
@@ -118,12 +103,16 @@ pub async fn login(mut db: Connection<Db>, credentials: Json<LoginRequest>) -> R
 }
 
 #[post("/register", data = "<registration>")]
-pub async fn register(mut db: Connection<Db>, registration: Json<Registration>) -> Result<Created<Json<JwtToken>>, Custom<String>> {
-    let user: Option<User> = sqlx::query("INSERT INTO users (username, real_name, verified) VALUES ($1, $2, $3) RETURNING *")
-        .bind(&registration.username).bind(&registration.real_name).bind(false)
-        .fetch_one(&mut *db)
-        .map_ok(|r| User::from(r))
-        .await.ok();
+pub async fn register(db: Connection<Db>, registration: Json<Registration>) -> Result<Created<Json<JwtToken>>, Custom<String>> {
+    let (user, db) = User::new(
+        registration.username.to_string(),
+        registration.email.to_string(),
+        match &registration.real_name {
+            None => None,
+            Some(real_name) => Some(real_name.to_string())
+        },
+        Some(false),
+    ).save(db).await;
 
     if user.is_none() {
         return Err(Custom(
@@ -155,12 +144,10 @@ pub async fn register(mut db: Connection<Db>, registration: Json<Registration>) 
         ));
     }
 
-    let response = sqlx::query("INSERT INTO credentials (user_id, email, password) VALUES ($1, $2)")
-        .bind(&user.id).bind(&registration.email).bind(&password_hash.unwrap().to_string())
-        .execute(&mut *db)
-        .await;
+    let (creds, _db) = Credentials::new_from(&user, password_hash.unwrap().to_string())
+        .unwrap().save(db).await;
 
-    if response.is_err() {
+    if creds.is_none() {
         return Err(Custom(
             Status::InternalServerError,
             "Could not register user credentials. Please try again.".to_string(),
