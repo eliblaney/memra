@@ -7,16 +7,14 @@ use argon2::{
 };
 
 use rocket::http::Status;
-use rocket::futures::TryFutureExt;
 use rocket_db_pools::Connection;
-use rocket_db_pools::sqlx;
 use rocket::response::status::Created;
 use rocket::serde::{Deserialize, Serialize, json::Json};
 use super::{Db, Result};
 use super::auth::AuthenticatedUser;
 use rocket::response::status::Custom;
 use super::auth;
-use super::models::{User, Credentials, ToJson};
+use super::models::*;
 
 #[derive(Deserialize)]
 pub struct Registration {
@@ -112,6 +110,8 @@ pub async fn register(db: Connection<Db>, registration: Json<Registration>) -> R
             Some(real_name) => Some(real_name.to_string())
         },
         Some(false),
+        chrono::Utc::now(),
+        chrono::Utc::now(),
     ).save(db).await;
 
     if user.is_none() {

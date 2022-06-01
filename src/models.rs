@@ -1,5 +1,5 @@
 use rocket::serde::{Deserialize, Serialize};
-use chrono::NaiveDateTime;
+use chrono::{Utc, DateTime};
 use memra::*;
 
 #[model]
@@ -10,6 +10,8 @@ pub struct User {
     pub email: String,
     pub real_name: Option<String>,
     pub verified: Option<bool>,
+    pub created_at: DateTime<Utc>,
+    pub last_login: DateTime<Utc>,
 }
 
 #[model(table = "credentials")]
@@ -63,7 +65,7 @@ pub struct History {
     pub user_id: i32,
     #[foreign(type = "Card")]
     pub card_id: i32,
-    pub ts: NaiveDateTime,
+    pub ts: DateTime<Utc>,
     pub num_confident: i32,
     pub num_correct: i32,
     pub num_wrong: i32,
@@ -85,7 +87,7 @@ pub struct Settings {
 pub struct Notification {
     #[foreign(type = "User")]
     pub user_id: i32,
-    pub ts: NaiveDateTime,
+    pub ts: DateTime<Utc>,
     pub message: String,
     pub icon: Vec<u8>,
 }
