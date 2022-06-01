@@ -1,3 +1,4 @@
+use super::models;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{
     decode, encode, errors::ErrorKind, DecodingKey, EncodingKey, Header, Validation,
@@ -6,8 +7,7 @@ use lazy_static::lazy_static;
 use rocket::{
     http::Status,
     request::{FromRequest, Outcome},
-    response::status::Custom,
-    serde::json::Json
+    response::status::Custom
 };
 use serde::{Deserialize, Serialize};
 
@@ -24,24 +24,33 @@ lazy_static! {
 
 // Used when decoding a token to `AuthenticatedUser`
 #[derive(Debug)]
-pub(crate) enum AuthenticationError {
+pub enum AuthenticationError {
     Missing,
     Decoding(String),
     Expired,
 }
 
-// Basic claim object. Only the `exp` claim (field) is required. Consult the `jsonwebtoken` documentation for other claims that can be validated.
-// The `name` is a custom claim for this API
+// Only the `exp` claim (field) is required. Consult the `jsonwebtoken` documentation for other claims that can be validated.
 #[derive(Serialize, Deserialize)]
-pub(crate) struct AuthenticatedUser {
-    pub(crate) name: String,
+pub struct AuthenticatedUser {
+    pub data: models::User,
     exp: usize,
 }
 
+impl Into<models::User> for AuthenticatedUser {
+    fn into(self) -> models::User {
+        self.data
+    }
+}
+
 impl AuthenticatedUser {
-    pub(crate) fn from_name(name: &str) -> Self {
+    pub fn id(&self) -> i32 {
+        self.data.id.unwrap()
+    }
+
+    pub(crate) fn from_user(user: models::User) -> Self {
         Self {
-            name: name.to_string(),
+            data: user,
             exp: 0,
         }
     }
@@ -94,22 +103,19 @@ impl AuthenticatedUser {
     }
 }
 
-pub(crate) enum User {
+pub enum User {
     Authenticated(AuthenticatedUser),
     Guest
 }
 
-/*
-// Optional implementation for helper methods
 impl User {
-    pub fn is_authenticated(&self) -> bool {
+    pub fn id(&self) -> Option<i32> {
         match self {
-            User::Authenticated(_) => true,
-            User::Guest => false
+            User::Authenticated(u) => Some(u.data.id.unwrap()),
+            User::Guest => None
         }
     }
 }
-*/
 
 // Rocket specific request guard implementations
 #[rocket::async_trait]
@@ -142,22 +148,3 @@ impl<'r> FromRequest<'r> for User {
     }
 }
 
-#[derive(Deserialize)]
-pub(crate) struct LoginRequest {
-    username: String,
-    password: String,
-}
-
-pub(crate) fn login(credentials: Json<LoginRequest>) -> Result<String, Custom<String>> {
-    // This should be real user validation code, but is left simple for this example
-    if credentials.username != "username" || credentials.password != "password" {
-        return Err(Custom(
-            Status::Unauthorized,
-            "account was not found".to_string(),
-        ));
-    }
-
-    let claim = AuthenticatedUser::from_name(&credentials.username);
-
-    claim.to_token()
-}
