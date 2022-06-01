@@ -44,6 +44,10 @@ impl Into<models::User> for AuthenticatedUser {
 }
 
 impl AuthenticatedUser {
+    pub fn id(&self) -> i32 {
+        self.data.id.unwrap()
+    }
+
     pub(crate) fn from_user(user: models::User) -> Self {
         Self {
             data: user,
@@ -102,6 +106,15 @@ impl AuthenticatedUser {
 pub enum User {
     Authenticated(AuthenticatedUser),
     Guest
+}
+
+impl User {
+    pub fn id(&self) -> Option<i32> {
+        match self {
+            User::Authenticated(u) => Some(u.data.id.unwrap()),
+            Guest => None
+        }
+    }
 }
 
 // Rocket specific request guard implementations

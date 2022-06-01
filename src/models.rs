@@ -3,20 +3,18 @@ use chrono::{Utc, DateTime};
 use memra::*;
 
 #[model]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
 pub struct User {
     pub username: String,
     pub email: String,
     pub real_name: Option<String>,
+    pub visibility: Option<bool>,
     pub verified: Option<bool>,
     pub created_at: DateTime<Utc>,
     pub last_login: DateTime<Utc>,
 }
 
 #[model(table = "credentials")]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Related, UpdateIfOwner)]
 pub struct Credentials {
     #[foreign(type = "User")]
     pub user_id: i32,
@@ -24,8 +22,7 @@ pub struct Credentials {
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Related, CreateAsOwner, ReadIfVisible, UpdateIfOwner, DeleteIfOwner)]
 pub struct Course {
     #[foreign(type = "User")]
     pub user_id: i32,
@@ -35,8 +32,7 @@ pub struct Course {
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Related, CreateAsOwner, ReadIfVisible, UpdateIfOwner, DeleteIfOwner)]
 pub struct Deck {
     #[foreign(type = "User")]
     pub user_id: i32,
@@ -46,8 +42,7 @@ pub struct Deck {
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Related, CreateAsOwner, ReadIfOwner, UpdateIfOwner, DeleteIfOwner)]
 pub struct Card {
     #[foreign(type = "User")]
     pub user_id: i32,
@@ -58,8 +53,7 @@ pub struct Card {
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Related, CreateAsOwner, ReadIfOwner, UpdateIfOwner, DeleteIfOwner)]
 pub struct History {
     #[foreign(type = "User")]
     pub user_id: i32,
@@ -72,18 +66,15 @@ pub struct History {
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Related, CreateAsOwner, ReadIfOwner, UpdateIfOwner, DeleteIfOwner)]
 pub struct Settings {
     #[foreign(type = "User")]
     pub user_id: i32,
-    pub public_profile: Option<bool>,
     pub avatar: Vec<u8>,
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Related, CreateAsOwner, ReadIfOwner, UpdateIfOwner, DeleteIfOwner)]
 pub struct Notification {
     #[foreign(type = "User")]
     pub user_id: i32,
@@ -93,8 +84,7 @@ pub struct Notification {
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Related, CreateAsOwner, ReadIfVisible, UpdateIfOwner, DeleteIfOwner)]
 pub struct Addon {
     #[foreign(type = "User")]
     pub user_id: i32,
@@ -105,8 +95,7 @@ pub struct Addon {
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Related)]
 pub struct CourseDeck {
     #[foreign(type = "Course")]
     pub course_id: i32,
@@ -115,8 +104,7 @@ pub struct CourseDeck {
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Related)]
 pub struct Followers {
     #[foreign(type = "User", collect = "followers")]
     pub follower_id: i32,
@@ -125,8 +113,7 @@ pub struct Followers {
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Related)]
 pub struct CourseSubscription {
     #[foreign(type = "User")]
     pub user_id: i32,
@@ -135,8 +122,7 @@ pub struct CourseSubscription {
 }
 
 #[model]
-#[derive(Related, Debug, Clone, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Related)]
 pub struct DeckSubscription {
     #[foreign(type = "User")]
     pub user_id: i32,

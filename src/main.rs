@@ -85,7 +85,7 @@ fn rocket() -> _ {
     rocket::build()
         .attach(Db::init())
         .mount("/public", FileServer::from("app/build"))
-        .mount("/api/users", routes![user::register, user::read, user::login, user::delete])
+        .mount("/api/users", routes![user::read_user, user::delete_user, user::login, user::register])
         .mount("/api", routes![item, private])
         .mount("/", routes![index]).attach(make_cors())
 }

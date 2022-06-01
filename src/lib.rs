@@ -5,7 +5,7 @@ use parse::Parser;
 use indexmap::IndexMap;
 
 #[proc_macro_attribute]
-pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
+pub fn model(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as AttributeArgs);
     let mut ast = parse_macro_input!(input as DeriveInput);
     if let Data::Struct(ref mut struct_data) = &mut ast.data {
@@ -131,6 +131,8 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream  {
             }
             
             return quote! {
+                #[derive(Debug, Clone, Deserialize, Serialize)]
+                #[serde(crate = "rocket::serde")]
                 #ast
 
                 impl From<rocket_db_pools::sqlx::postgres::PgRow> for #name {
@@ -242,7 +244,7 @@ fn builder(i: &mut std::vec::IntoIter<proc_macro2::TokenStream>, a: proc_macro2:
 }
 
 #[proc_macro_derive(Related, attributes(foreign))]
-pub fn impl_related(input: TokenStream) -> TokenStream  {
+pub fn impl_related(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let name = &ast.ident;
     if let Data::Struct(s) = &ast.data {
@@ -392,5 +394,128 @@ pub fn impl_related(input: TokenStream) -> TokenStream  {
 
     quote! {
         compile_error!("macro can only be used on structs with named fields");
+    }.into()
+}
+
+#[proc_macro_derive(CreateAsOwner)]
+pub fn impl_create_as_owner(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
+    let fname = format_ident!("create_{}", &name.to_string().to_lowercase());
+
+    quote! {
+        #[post("/", data = "<model>")]
+        async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, model: rocket::serde::json::Json<#name>) -> Option<rocket::response::status::Created<rocket::serde::json::Json<#name>>> {
+            let mut model = model.into_inner();
+            model.user_id = user.id();
+            let (model, _) = model.save(db).await;
+
+            match model {
+                None => None,
+                Some(m) => Some(rocket::response::status::Created::new("/").body(rocket::serde::json::Json(m)))
+            }
+        }
+    }.into()
+}
+
+#[proc_macro_derive(Read)]
+pub fn impl_read(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
+    let fname = format_ident!("read_{}", &name.to_string().to_lowercase());
+
+    quote! {
+        #[get("/<id>")]
+        pub async fn #fname(db: rocket_db_pools::Connection<crate::Db>, id: i32) -> Option<rocket::serde::json::Json<#name>> {
+            let (m, _db) = <#name>::read(id, db).await;
+            m.json()
+        }
+    }.into()
+}
+
+#[proc_macro_derive(ReadIfVisible)]
+pub fn impl_read_if_visible(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
+    let fname = format_ident!("read_{}", &name.to_string().to_lowercase());
+
+    quote! {
+        #[get("/<id>")]
+        pub async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, id: i32) -> Option<rocket::serde::json::Json<#name>> {
+            let (m, _db) = <#name>::read(id, db).await;
+            if m.is_none() {
+                return None;
+            }
+            let m = m.unwrap();
+            if m.visibility.is_some() && m.visibility.unwrap() && m.user_id != user.id() {
+                return None;
+            }
+            Some(m.json())
+        }
+    }.into()
+}
+
+#[proc_macro_derive(ReadIfOwner)]
+pub fn impl_read_if_owner(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
+    let fname = format_ident!("read_{}", &name.to_string().to_lowercase());
+
+    quote! {
+        #[get("/<id>")]
+        pub async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, id: i32) -> Option<rocket::serde::json::Json<#name>> {
+            let (m, _db) = <#name>::read(id, db).await;
+            if m.is_none() {
+                return None;
+            }
+            let m = m.unwrap();
+            if m.user_id != user.id() {
+                return None;
+            }
+            Some(m.json())
+        }
+    }.into()
+}
+
+#[proc_macro_derive(UpdateIfOwner)]
+pub fn impl_update_if_owner(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
+    let fname = format_ident!("update_{}", &name.to_string().to_lowercase());
+
+    quote! {
+        #[put("/", data = "<model>")]
+        async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, model: rocket::serde::json::Json<#name>) -> Option<rocket::serde::json::Json<#name>> {
+            let mut model = model.into_inner();
+            if model.id.is_none() {
+                return None;
+            }
+            model.user_id = user.id();
+            let (m, _) = model.save(db).await;
+
+            m.json()
+        }
+    }.into()
+}
+
+#[proc_macro_derive(DeleteIfOwner)]
+pub fn impl_delete_if_owner(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
+    let fname = format_ident!("delete_{}", &name.to_string().to_lowercase());
+
+    quote! {
+        #[delete("/<id>")]
+        pub async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, id: i32) -> rocket::serde::json::Json<bool> {
+            let (m, db) = <#name>::find(id, db).await;
+            if m.is_none() {
+                return rocket::serde::json::Json(false);
+            }
+            if m.unwrap().user_id != user.id() {
+                return rocket::serde::json::Json(false);
+            }
+            let (rows_affected, _) = <#name>::delete(user.id(), db).await;
+            rocket::serde::json::Json(rows_affected.is_ok())
+        }
     }.into()
 }

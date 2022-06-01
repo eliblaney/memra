@@ -8,31 +8,29 @@ use argon2::{
 
 use rocket::http::Status;
 use rocket_db_pools::Connection;
-use rocket::response::status::Created;
 use rocket::serde::{Deserialize, Serialize, json::Json};
 use super::{Db, Result};
 use super::auth::AuthenticatedUser;
-use rocket::response::status::Custom;
+use rocket::response::status::{Created, Custom};
 use super::auth;
 use super::models::*;
 
-#[derive(Deserialize)]
-pub struct Registration {
-    pub real_name: Option<String>,
-    pub username: String,
-    pub email: String,
-    pub password: String,
-}
-
 #[get("/<id>")]
-pub async fn read(db: Connection<Db>, id: i32) -> Option<Json<User>> {
-    let (u, _db) = User::read(id, db).await;
-    u.json()
+pub async fn read_user(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, id: i32) -> Option<rocket::serde::json::Json<User>> {
+    let (m, _db) = <User>::read(id, db).await;
+    if m.is_none() {
+        return None;
+    }
+    let m = m.unwrap();
+    if m.id.is_none() || (m.visibility.is_some() && m.visibility.unwrap() && m.id.unwrap() != user.id()) {
+        return None;
+    }
+    Some(m.json())
 }
 
 #[delete("/")]
-pub async fn delete(db: Connection<Db>, user: AuthenticatedUser) -> Result<Option<()>> {
-    let (rows_affected, _db) = User::delete(user.data.id.unwrap(), db).await;
+pub async fn delete_user(db: Connection<Db>, user: AuthenticatedUser) -> Result<Option<()>> {
+    let (rows_affected, _db) = User::delete(user.id(), db).await;
     Ok((rows_affected? == 1).then(|| ()))
 }
 
@@ -100,6 +98,14 @@ pub async fn login(db: Connection<Db>, credentials: Json<LoginRequest>) -> Resul
     Ok(Json(JwtToken { token: claim.to_token()? }))
 }
 
+#[derive(Deserialize)]
+pub struct Registration {
+    pub real_name: Option<String>,
+    pub username: String,
+    pub email: String,
+    pub password: String,
+}
+
 #[post("/register", data = "<registration>")]
 pub async fn register(db: Connection<Db>, registration: Json<Registration>) -> Result<Created<Json<JwtToken>>, Custom<String>> {
     let (user, db) = User::new(
@@ -109,6 +115,7 @@ pub async fn register(db: Connection<Db>, registration: Json<Registration>) -> R
             None => None,
             Some(real_name) => Some(real_name.to_string())
         },
+        Some(true),
         Some(false),
         chrono::Utc::now(),
         chrono::Utc::now(),
