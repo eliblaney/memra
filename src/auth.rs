@@ -112,7 +112,7 @@ impl User {
     pub fn id(&self) -> Option<i32> {
         match self {
             User::Authenticated(u) => Some(u.data.id.unwrap()),
-            Guest => None
+            User::Guest => None
         }
     }
 }
