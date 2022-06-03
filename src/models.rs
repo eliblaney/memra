@@ -52,7 +52,7 @@ pub struct Card {
     pub back: Vec<u8>,
 }
 
-#[model]
+#[model(table = "history")]
 #[derive(Related, CreateAsOwner, ReadIfOwner, UpdateIfOwner, DeleteIfOwner)]
 pub struct History {
     #[foreign(type = "User")]
@@ -65,7 +65,7 @@ pub struct History {
     pub num_wrong: i32,
 }
 
-#[model]
+#[model(table = "settings")]
 #[derive(Related, CreateAsOwner, ReadIfOwner, UpdateIfOwner, DeleteIfOwner)]
 pub struct Settings {
     #[foreign(type = "User")]
@@ -103,7 +103,7 @@ pub struct CourseDeck {
     pub deck_id: i32,
 }
 
-#[model]
+#[model(table = "followers")]
 #[derive(Related)]
 pub struct Followers {
     #[foreign(type = "User", collect = "followers")]
@@ -112,7 +112,7 @@ pub struct Followers {
     pub following_id: i32,
 }
 
-#[model]
+#[model(table = "course_subscriptions")]
 #[derive(Related)]
 pub struct CourseSubscription {
     #[foreign(type = "User")]
@@ -121,7 +121,7 @@ pub struct CourseSubscription {
     pub course_id: i32,
 }
 
-#[model]
+#[model(table = "deck_subscriptions")]
 #[derive(Related)]
 pub struct DeckSubscription {
     #[foreign(type = "User")]
