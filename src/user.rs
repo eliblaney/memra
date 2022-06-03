@@ -15,6 +15,32 @@ use rocket::response::status::{Created, Custom};
 use super::auth;
 use super::models::*;
 
+fn hash(text: &String) -> Result<String, Custom<String>> {
+    let salt = SaltString::generate(&mut OsRng);
+    // Argon2 with default params (Argon2id v19)
+    let argon2 = Argon2::default();
+    // Hash password to PHC string ($argon2id$v=19$...)
+    let password_hash = argon2.hash_password(text.as_bytes(), &salt);
+
+    if password_hash.is_err() {
+        return Err(Custom(
+            Status::InternalServerError,
+            "Could not create user credentials. Please try again.".to_string(),
+        ));
+    }
+
+    let password_hash = password_hash.ok();
+
+    if password_hash.is_none() {
+        return Err(Custom(
+            Status::InternalServerError,
+            "Could not verify user credentials. Please try again.".to_string(),
+        ));
+    }
+
+    Ok(password_hash.unwrap().to_string())
+}
+
 #[get("/<id>")]
 pub async fn read_user(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, id: i32) -> Option<rocket::serde::json::Json<User>> {
     let (m, _db) = <User>::read(id, db).await;
@@ -32,6 +58,24 @@ pub async fn read_user(db: rocket_db_pools::Connection<crate::Db>, user: crate::
 pub async fn delete_user(db: Connection<Db>, user: AuthenticatedUser) -> Result<Option<()>> {
     let (rows_affected, _db) = User::delete(user.id(), db).await;
     Ok((rows_affected? == 1).then(|| ()))
+}
+
+#[put("/change_password", data = "<password>")]
+pub async fn change_password(db: Connection<Db>, user: AuthenticatedUser, password: String) -> Result<Json<bool>, Custom<String>> {
+    let (creds, db) = user.data.find_credentials(db).await;
+
+    if creds.len() == 0 {
+        return Err(Custom(
+            Status::InternalServerError,
+            "Could not change password. Please try again.".to_string(),
+        ));
+    }
+
+    let mut creds = creds.into_iter().next().unwrap();
+    creds.password = hash(&password)?;
+    let (result, _db) = creds.save(db).await;
+
+    Ok(Json(result.is_some()))
 }
 
 #[derive(Serialize)]
@@ -129,29 +173,10 @@ pub async fn register(db: Connection<Db>, registration: Json<Registration>) -> R
     }
 
     let user = user.unwrap();
-    let salt = SaltString::generate(&mut OsRng);
-    // Argon2 with default params (Argon2id v19)
-    let argon2 = Argon2::default();
-    // Hash password to PHC string ($argon2id$v=19$...)
-    let password_hash = argon2.hash_password(&registration.password.as_bytes(), &salt);
+    
+    let password_hash = hash(&registration.password)?;
 
-    if password_hash.is_err() {
-        return Err(Custom(
-            Status::InternalServerError,
-            "Could not create user credentials. Please try again.".to_string(),
-        ));
-    }
-
-    let password_hash = password_hash.ok();
-
-    if password_hash.is_none() {
-        return Err(Custom(
-            Status::InternalServerError,
-            "Could not verify user credentials. Please try again.".to_string(),
-        ));
-    }
-
-    let (creds, _db) = Credentials::new_from(&user, password_hash.unwrap().to_string())
+    let (creds, _db) = Credentials::new_from(&user, password_hash)
         .unwrap().save(db).await;
 
     if creds.is_none() {

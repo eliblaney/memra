@@ -9,16 +9,17 @@ mod user;
 use rocket::fs::{FileServer, NamedFile};
 use rocket::http::Method;
 use rocket_cors::{AllowedHeaders, AllowedOrigins, Cors, CorsOptions};
-use rocket::serde::{Deserialize, Serialize, json::Json};
 use rocket_db_pools::{sqlx, Database};
-
-use auth::User;
+use memra::router;
 
 type Result<T, E = rocket::response::Debug<sqlx::Error>> = std::result::Result<T, E>;
 
 #[derive(Database)]
 #[database("main")]
 pub struct Db(sqlx::PgPool);
+
+#[router(models, Course, Deck, Card, History, Settings, Notification, Addon)]
+pub struct MemraRouter;
 
 fn make_cors() -> Cors {
     let allowed_origins = AllowedOrigins::some_exact(&[
@@ -43,49 +44,18 @@ fn make_cors() -> Cors {
     }.to_cors().expect("Error while building CORS")
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Item {
-    id: usize,
-    name: String
-}
-
 #[get("/")]
 async fn index() -> Option<NamedFile> {
     NamedFile::open("app/build/index.html").await.ok()
-}
-
-#[get("/item/<id>")]
-fn item(id: usize) -> Json<Item> {
-    Json(Item { id, name: "Example item".into() })
-}
-
-#[derive(Serialize)]
-struct PrivateResponse {
-    message: String,
-    user: String,
-}
-
-#[get("/private")]
-fn private(user: User) -> Json<PrivateResponse> {
-    match user {
-        User::Authenticated(u) => Json(PrivateResponse {
-            message: "Authenticated User.".to_string(),
-                user: u.data.username,
-        }),
-        User::Guest => 
-            Json(PrivateResponse {
-                message: "Unauthenticated.".to_string(),
-                user: "None".to_string()
-            })
-    }
 }
 
 #[launch]
 fn rocket() -> _ {
     rocket::build()
         .attach(Db::init())
+        .attach(make_cors())
+        .attach(MemraRouter)
         .mount("/public", FileServer::from("app/build"))
-        .mount("/api/users", routes![user::read_user, user::delete_user, user::login, user::register])
-        .mount("/api", routes![item, private])
-        .mount("/", routes![index]).attach(make_cors())
+        .mount("/api/users", routes![user::read_user, user::delete_user, user::login, user::register, user::change_password])
+        .mount("/", routes![index])
 }

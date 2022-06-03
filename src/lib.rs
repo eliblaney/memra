@@ -117,7 +117,7 @@ pub fn model(args: TokenStream, input: TokenStream) -> TokenStream {
             let find_sql = format!("SELECT * FROM {} WHERE id = $1", table);
             let read_sql = format!("SELECT * FROM {} WHERE id = $1", table);
             let delete_sql = format!("DELETE FROM {} WHERE id = $1", table);
-            
+
             return quote! {
                 #[derive(Debug, Clone, Deserialize, Serialize)]
                 #[serde(crate = "rocket::serde")]
@@ -386,7 +386,7 @@ pub fn impl_create_as_owner(input: TokenStream) -> TokenStream {
 
     quote! {
         #[post("/", data = "<model>")]
-        async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, model: rocket::serde::json::Json<#name>) -> Option<rocket::response::status::Created<rocket::serde::json::Json<#name>>> {
+        pub async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, model: rocket::serde::json::Json<#name>) -> Option<rocket::response::status::Created<rocket::serde::json::Json<#name>>> {
             let mut model = model.into_inner();
             model.user_id = user.id();
             let (model, _) = model.save(db).await;
@@ -407,7 +407,7 @@ pub fn impl_read(input: TokenStream) -> TokenStream {
 
     quote! {
         #[get("/<id>")]
-        pub async fn #fname(db: rocket_db_pools::Connection<crate::Db>, id: i32) -> Option<rocket::serde::json::Json<#name>> {
+        pub async fn #fname(db: rocket_db_pools::Connection<crate::Db>, _user: crate::auth::User, id: i32) -> Option<rocket::serde::json::Json<#name>> {
             let (m, _db) = <#name>::read(id, db).await;
             m.json()
         }
@@ -422,14 +422,23 @@ pub fn impl_read_if_visible(input: TokenStream) -> TokenStream {
 
     quote! {
         #[get("/<id>")]
-        pub async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, id: i32) -> Option<rocket::serde::json::Json<#name>> {
+        pub async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::User, id: i32) -> Option<rocket::serde::json::Json<#name>> {
             let (m, _db) = <#name>::read(id, db).await;
             if m.is_none() {
                 return None;
             }
             let m = m.unwrap();
-            if m.visibility.is_some() && m.visibility.unwrap() && m.user_id != user.id() {
-                return None;
+            if m.visibility.is_some()  {
+                match user {
+                    crate::auth::User::Guest =>  {
+                        return None;
+                    },
+                    crate::auth::User::Authenticated(user) => {
+                        if m.visibility.unwrap() && m.user_id != user.id() {
+                            return None;
+                        }
+                    }
+                }
             }
             Some(m.json())
         }
@@ -444,13 +453,17 @@ pub fn impl_read_if_owner(input: TokenStream) -> TokenStream {
 
     quote! {
         #[get("/<id>")]
-        pub async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, id: i32) -> Option<rocket::serde::json::Json<#name>> {
+        pub async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::User, id: i32) -> Option<rocket::serde::json::Json<#name>> {
+            if let crate::auth::User::Guest = user {
+                return None;
+            }
+
             let (m, _db) = <#name>::read(id, db).await;
             if m.is_none() {
                 return None;
             }
             let m = m.unwrap();
-            if m.user_id != user.id() {
+            if m.user_id != user.id().unwrap() {
                 return None;
             }
             Some(m.json())
@@ -466,14 +479,23 @@ pub fn impl_update_if_owner(input: TokenStream) -> TokenStream {
 
     quote! {
         #[put("/", data = "<model>")]
-        async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, model: rocket::serde::json::Json<#name>) -> Option<rocket::serde::json::Json<#name>> {
-            let mut model = model.into_inner();
+        pub async fn #fname(db: rocket_db_pools::Connection<crate::Db>, user: crate::auth::AuthenticatedUser, model: rocket::serde::json::Json<#name>) -> Option<rocket::serde::json::Json<#name>> {
+            let model = model.into_inner();
             if model.id.is_none() {
                 return None;
             }
-            model.user_id = user.id();
-            let (m, _) = model.save(db).await;
 
+            let (model, db) = <#name>::read(model.id.unwrap(), db).await;
+            if model.is_none() {
+                return None;
+            }
+
+            let model = model.unwrap();
+            if model.user_id != user.id() {
+                return None;
+            }
+
+            let (m, _) = model.save(db).await;
             m.json()
         }
     }.into()
@@ -497,6 +519,76 @@ pub fn impl_delete_if_owner(input: TokenStream) -> TokenStream {
             }
             let (rows_affected, _) = <#name>::delete(user.id(), db).await;
             rocket::serde::json::Json(rows_affected.is_ok())
+        }
+    }.into()
+}
+
+#[proc_macro_attribute]
+pub fn router(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as AttributeArgs);
+
+    let mut models: Vec<Path> = vec![];
+    for arg in args {
+        if let NestedMeta::Meta(inner) = arg {
+            if let Meta::Path(path) = inner {
+                models.push(path);
+            } else {
+                return quote! {
+                    compile_error!("router can only accept paths to model structs");
+                }.into();
+            }
+        }
+    }
+    let path_prefix = models.remove(0);
+
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
+    let name_str = format!("{}", &name);
+    let mut mount_routes = quote! { };
+
+    for model in models {
+        let mut segments = model.segments;
+        let ident = &segments.pop().unwrap();
+        let ident = &ident.value().ident;
+        let path = &mut path_prefix.clone();
+        path.segments.extend(segments);
+        let lower_name = &ident.to_string().to_lowercase();
+        let mount_point = format!("/{}", &lower_name);
+
+        let methods: Vec<Path> = vec!["create_$", "read_$", "update_$", "delete_$"]
+            .iter().map(|s| {
+                let i = format_ident!("{}", s.replace("$", &lower_name));
+                let mut p_clone = path.clone();
+                p_clone.segments.push(PathSegment {
+                    ident: i,
+                    arguments: PathArguments::None,
+                });
+                p_clone
+            }).collect();
+        
+        mount_routes = quote! {
+            #mount_routes
+            .mount(#mount_point, routes![#(#methods),*])
+        };
+    }
+
+    quote! {
+        #ast
+
+        #[rocket::async_trait]
+        impl rocket::fairing::Fairing for #name {
+            fn info(&self) -> rocket::fairing::Info {
+                rocket::fairing::Info {
+                    name: #name_str,
+                    kind: rocket::fairing::Kind::Ignite
+                }
+            }
+
+            async fn on_ignite(&self, rocket: rocket::Rocket<rocket::Build>) -> rocket::fairing::Result {
+                Ok(rocket
+                    #mount_routes
+                )
+            }
         }
     }.into()
 }
