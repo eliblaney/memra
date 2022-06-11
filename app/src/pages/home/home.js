@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import memraLogo from '../../logo1.svg';
+import tileImage from '../../anatomy_placeholder.jpg'
 import './style.css';
 
 function Home() {
@@ -40,14 +41,17 @@ function Home() {
 			{menu}
 			<div className="container">
 				<img src={memraLogo} className="logo" alt="Memra logo"/>
-				<h1>Home</h1>
+				<h1 className="headers">Favorite Decks</h1>
 				<div className="row">
-					<div className="square">
-						<div
-							className="small_square"/>
+					<div className="tile">
+						<img src="tileImage" className="tileImage" alt="Image for tiles"/>
 					</div>
-					<div className="square"/>
-					<div className="square"/>
+					<div className="tile">
+						<img src="tileImage" className="tileImage" alt="Image for tiles"/>
+					</div>
+					<div className="tile">
+						<img src="tileImage" className="tileImage" alt="Image for tiles"/>
+					</div>
 				</div>
 			</div>
 		</div>
