@@ -97,7 +97,7 @@ p {
     margin: 20px;
     border-radius: 25px;
     color: #ffffff;
-    background-image: url("../../anatomy_placeholder.jpg");
+    background: linear-gradient(180deg, rgba(0, 37, 16, 0) 55%, #002510), url("../../anatomy_placeholder.jpg"), #AFAFAF;
     background-size: 100% 100%;
 }
 
