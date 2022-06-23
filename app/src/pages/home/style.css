@@ -85,20 +85,80 @@ p {
 .row{
     display: flex;
     flex-direction: row;
-    justify-content: space-around;
+    justify-content: left;
     flex-wrap: wrap;
     width: 100%;
 }
 
-.tile{
+.favTile{
     min-width: 200px;
     min-height: 200px;
     padding: 20px;
-    margin: 20px;
+    margin-left: 50px;
     border-radius: 25px;
-    color: #ffffff;
     background: linear-gradient(180deg, rgba(0, 37, 16, 0) 55%, #002510), url("../../anatomy_placeholder.jpg"), #AFAFAF;
-    background-size: 100% 100%;
+    background-size: cover;
+    background-position: 70% 50%;
+    float: left;
+}
+
+.favTileHeader {
+    position: relative;
+    width: 100px;
+    height: 25px;
+    left: 0px;
+    top: 160px;
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 400;
+    font-size: 25px;
+    line-height: 16px;
+    color: #ffffff;
+}
+.favTileSubheader {
+    position: relative;
+    width: 100px;
+    height: 25px;
+    left: 0px;
+    top: 160px;
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 400;
+    font-size: 12px;
+    line-height: 16px;
+    color: #ffffff;
+}
+
+.circle{
+    position: relative;
+    left: 110px;
+    top: 90px;
+    height: 100px;
+    width: 100px;
+    background-color: #464646;
+    border-radius: 50%;
+}
+
+.arrow1{
+    position: relative;
+    left: 137px;
+    top: 42px;
+    height: 3px;
+    width: 45px;
+    background-color: #cacaca;
+    border-radius: 10px;
+}
+
+.arrow2{
+    position: relative;
+    left: 151px;
+    top: 27px;
+    height: 3px;
+    width: 35px;
+    background-color: #cacaca;
+    border-radius: 10px;
+    transform: rotate(45deg);
+    opacity: 1;
 }
 
 /* DEFAULT REACT LOGO CSS BELOW */

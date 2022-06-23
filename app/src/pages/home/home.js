@@ -43,14 +43,26 @@ function Home() {
 				<img src={memraLogo} className="logo" alt="Memra logo"/>
 				<h1 className="headers">Favorite Decks</h1>
 				<div className="row">
-					<div className="tile">
-						<img src="tileImage" className="tileImage" alt="Image for tiles"/>
+					<div className="favTile">
+						<img src="tileImage" className="tileImage" alt=" "/>
+						<div className="favTileHeader">Anatomy</div>
+						<div className="favTileSubheader">Created by you</div>
 					</div>
-					<div className="tile">
-						<img src="tileImage" className="tileImage" alt="Image for tiles"/>
+					<div className="favTile">
+						<img src="tileImage" className="tileImage" alt=" "/>
+						<div className="favTileHeader">Anatomy</div>
+						<div className="favTileSubheader">Created by you</div>
 					</div>
-					<div className="tile">
-						<img src="tileImage" className="tileImage" alt="Image for tiles"/>
+					<div className="favTile">
+						<img src="tileImage" className="tileImage" alt=" "/>
+						<div className="favTileHeader">Anatomy</div>
+						<div className="favTileSubheader">Created by you</div>
+					</div>
+					<div className="favArrow">
+						<div className="circle"></div>
+						<div className="arrow1"></div>
+						<div className="arrow2"></div>
+						<div className="arrow3"></div>
 					</div>
 				</div>
 			</div>
